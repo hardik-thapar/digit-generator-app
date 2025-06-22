@@ -2,9 +2,8 @@ import streamlit as st
 import torch
 import torch.nn as nn
 import numpy as np
-import base64
 
-# Add custom CSS for styling
+# 🔧 Custom Styling
 st.markdown("""
     <style>
     .stApp {
@@ -24,9 +23,6 @@ st.markdown("""
         text-align: center;
         padding-bottom: 10px;
     }
-    .css-1aumxhk {
-        background-color: #1f2937 !important;
-    }
     .stButton>button {
         background-color: #ef4444;
         color: white;
@@ -37,38 +33,47 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Generator model
+# 🧠 Generator for Conditional GAN
 class Generator(nn.Module):
-    def __init__(self, input_size=64, hidden_size=256, output_size=784):
-        super(Generator, self).__init__()
+    def __init__(self, z_dim=100, label_dim=10, img_dim=784):
+        super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
+            nn.Linear(z_dim + label_dim, 256),
             nn.ReLU(True),
-            nn.Linear(hidden_size, output_size),
+            nn.Linear(256, img_dim),
             nn.Tanh()
         )
 
-    def forward(self, z):
-        return self.net(z)
+    def forward(self, z, labels):
+        x = torch.cat([z, labels], dim=1)
+        return self.net(x)
 
-# Load model
-G = Generator().cpu()
-G.load_state_dict(torch.load("mnist_generator.pth", map_location=torch.device('cpu')))
+# 🔄 One-hot encoding for digit labels
+def one_hot(label, num_classes=10):
+    vec = torch.zeros(num_classes)
+    vec[label] = 1
+    return vec.unsqueeze(0)
+
+# 📦 Load trained conditional generator
+device = torch.device("cpu")
+G = Generator().to(device)
+G.load_state_dict(torch.load("cgan_generator.pth", map_location=device))
 G.eval()
 
-# UI
+# 🎨 UI
 st.markdown('<div class="title">🧠 Handwritten Digit Image Generator</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Generate MNIST-like digits using your own trained GAN model</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Generate MNIST-like digits using your trained Conditional GAN model</div>', unsafe_allow_html=True)
 
 digit = st.selectbox("👉 Choose a digit (0–9):", list(range(10)))
 
 if st.button("🚀 Generate Images"):
     st.markdown(f"### 🖼️ Generated images of digit **{digit}**")
-
     cols = st.columns(5)
+
     for i in range(5):
-        z = torch.randn(1, 64)
+        z = torch.randn(1, 100)
+        label = one_hot(digit)
         with torch.no_grad():
-            img = G(z).view(28, 28).numpy()
-        img = (img + 1) / 2  # Normalize to [0,1]
+            img = G(z, label).view(28, 28).cpu().numpy()
+        img = (img + 1) / 2  # Rescale from [-1, 1] to [0, 1]
         cols[i].image(img, width=100, caption=f"Sample {i+1}")
